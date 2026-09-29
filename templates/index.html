@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduGenie</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Welcome to EduGenie 🧠✨</h1>
+    <p>Your personal AI tutor for learning support!</p>
+
+    <!-- Q&A -->
+    <form id="qaForm">
+        <label><strong>Ask EduGenie a Question:</strong></label><br><br>
+        <input type="text" id="question" placeholder="Why is the sky blue?" required>
+        <button type="submit">Get Answer</button>
+    </form>
+    <div id="qaResult" class="output"></div>
+
+    <!-- Explanation -->
+    <form id="explainForm">
+        <label><strong>Need an Explanation?</strong></label><br><br>
+        <input type="text" id="topic" placeholder="Photosynthesis" required>
+        <button type="submit">Explain</button>
+    </form>
+    <div id="explanationResult" class="output"></div>
+
+    <!-- Summary -->
+    <form id="summaryForm">
+        <label><strong>Summarize a Paragraph:</strong></label><br><br>
+        <input type="text" id="summaryText" placeholder="Paste long content to summarize" required>
+        <button type="submit">Summarize</button>
+    </form>
+    <div id="summaryResult" class="output"></div>
+
+    <!-- Quiz -->
+    <form id="quizForm">
+        <label><strong>Generate a Quiz:</strong></label><br><br>
+        <input type="text" id="quizText" placeholder="Solar System" required>
+        <button type="submit">Generate Quiz</button>
+    </form>
+    <div id="quizResult" class="output"></div>
+
+    <!-- Learning Recommendations -->
+    <form id="learnForm">
+        <label><strong>Get Learning Recommendations:</strong></label><br><br>
+        <input type="text" id="learnTopic" placeholder="e.g. Linear Regression" required>
+        <button type="submit">Get Recommendations</button>
+    </form>
+    <div id="learnResult" class="output"></div>
+
+    <script>
+        const LOADING = "⏳ Thinking...";
+
+        function escapeHtml(s) {
+            const d = document.createElement("div");
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        async function request(url, options) {
+            const res = await fetch(url, options);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Request failed");
+            return data;
+        }
+
+        function postJSON(url, body) {
+            return request(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+        }
+
+        function bind(formId, outId, handler) {
+            document.getElementById(formId).addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const out = document.getElementById(outId);
+                out.style.display = "block";
+                out.innerHTML = LOADING;
+                try {
+                    out.innerHTML = await handler();
+                } catch (err) {
+                    out.innerHTML = "⚠️ " + escapeHtml(err.message);
+                }
+            });
+        }
+
+        bind("qaForm", "qaResult", async () => {
+            const q = document.getElementById("question").value;
+            const data = await request("/qa?question=" + encodeURIComponent(q));
+            return "<strong>Answer:</strong><pre>" + escapeHtml(data.answer) + "</pre>";
+        });
+
+        bind("explainForm", "explanationResult", async () => {
+            const topic = document.getElementById("topic").value;
+            const data = await postJSON("/explain/", { topic });
+            return "<strong>Explanation:</strong><pre>" + escapeHtml(data.explanation) + "</pre>";
+        });
+
+        bind("summaryForm", "summaryResult", async () => {
+            const text = document.getElementById("summaryText").value;
+            const data = await postJSON("/summarize/", { text });
+            return "<strong>Summary:</strong><pre>" + escapeHtml(data.summary) + "</pre>";
+        });
+
+        bind("learnForm", "learnResult", async () => {
+            const topic = document.getElementById("learnTopic").value;
+            const data = await request("/learn/recommendations?topic=" + encodeURIComponent(topic));
+            return "<strong>Learning Path for " + escapeHtml(data.topic) + ":</strong><pre>" +
+                escapeHtml(data.recommendation) + "</pre>";
+        });
+
+        // Quiz: interactive MCQs, reveals the correct answer when a wrong option is chosen
+        bind("quizForm", "quizResult", async () => {
+            const text = document.getElementById("quizText").value;
+            const data = await postJSON("/quiz", { text });
+            const out = document.getElementById("quizResult");
+            out.innerHTML = "";
+            data.quiz.forEach((q, i) => {
+                const box = document.createElement("div");
+                box.className = "question";
+                const title = document.createElement("p");
+                title.innerHTML = "<strong>Q" + (i + 1) + ".</strong> " + escapeHtml(q.question);
+                box.appendChild(title);
+                const feedback = document.createElement("p");
+                feedback.className = "feedback";
+                (q.options || []).forEach((opt) => {
+                    const label = document.createElement("label");
+                    label.className = "option";
+                    const radio = document.createElement("input");
+                    radio.type = "radio";
+                    radio.name = "q" + i;
+                    radio.addEventListener("change", () => {
+                        if (opt === q.answer) {
+                            feedback.textContent = "✅ Correct!";
+                            feedback.className = "feedback correct";
+                        } else {
+                            feedback.textContent = "❌ Wrong. Correct answer: " + q.answer;
+                            feedback.className = "feedback wrong";
+                        }
+                    });
+                    label.appendChild(radio);
+                    label.appendChild(document.createTextNode(" " + opt));
+                    box.appendChild(label);
+                });
+                box.appendChild(feedback);
+                out.appendChild(box);
+            });
+            return out.innerHTML;
+        });
+    </script>
+</body>
+</html>
